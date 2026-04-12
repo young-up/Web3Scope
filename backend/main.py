@@ -39,18 +39,24 @@ REPORTS_DIR.mkdir(exist_ok=True)
 @app.get("/api/events")
 async def get_events():
     """获取最新链上事件"""
+    if not _cache["events"] and not _cache["news"]:
+        await update_all()
     return {"data": _cache["events"], "count": len(_cache["events"])}
 
 
 @app.get("/api/news")
 async def get_news():
     """获取最新新闻"""
+    if not _cache["news"]:
+        await update_all()
     return {"data": _cache["news"], "count": len(_cache["news"])}
 
 
 @app.get("/api/prices")
 async def get_prices():
     """获取行情数据"""
+    if not _cache["prices"]:
+        await update_all()
     return {"data": _cache["prices"]}
 
 
