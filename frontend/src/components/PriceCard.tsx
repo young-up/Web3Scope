@@ -16,7 +16,7 @@ export function PriceCard({ data }: { data: PriceData }) {
             {isUp ? "↑" : "↓"} {Math.abs(data.change_24h).toFixed(2)}%
           </span>
           <span className="text-xs text-gray-500 mt-1">
-            MC: ${(data.market_cap / 1e9).toFixed(1)}B
+            MC: ${((data.market_cap || 0) / 1e9).toFixed(1)}B
           </span>
         </div>
       </div>
