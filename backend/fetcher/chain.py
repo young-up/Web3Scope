@@ -20,10 +20,11 @@ def _alchemy_request(method, params=None):
 
 
 def get_eth_price():
-    """获取ETH价格（Binance）"""
+    """获取ETH价格"""
     try:
-        r = requests.get("https://api.binance.com/api/v3/ticker/price", params={"symbol": "ETHUSDT"}, timeout=10)
-        return float(r.json()["price"])
+        r = requests.get("https://api.coingecko.com/api/v3/simple/price",
+            params={"ids": "ethereum", "vs_currencies": "usd"}, timeout=10)
+        return r.json().get("ethereum", {}).get("usd", 0)
     except:
         return 0
 
@@ -81,31 +82,38 @@ def fetch_latest_transfers(limit=20):
 
 
 def fetch_top_tokens():
-    """获取主流代币行情（Binance API，国内可用）"""
-    symbols = ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT",
-               "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "LINKUSDT"]
-    names = {"BTC": "Bitcoin", "ETH": "Ethereum", "BNB": "BNB", "SOL": "Solana",
-             "XRP": "XRP", "ADA": "Cardano", "DOGE": "Dogecoin", "AVAX": "Avalanche",
-             "DOT": "Polkadot", "LINK": "Chainlink"}
+    """获取主流代币行情"""
+    ids = "bitcoin,ethereum,binancecoin,solana,ripple,cardano,dogecoin,avalanche-2,polkadot,chainlink"
+    names_map = {
+        "bitcoin": "Bitcoin", "ethereum": "Ethereum", "binancecoin": "BNB",
+        "solana": "Solana", "ripple": "XRP", "cardano": "Cardano",
+        "dogecoin": "Dogecoin", "avalanche-2": "Avalanche",
+        "polkadot": "Polkadot", "chainlink": "Chainlink",
+    }
+    symbol_map = {
+        "bitcoin": "BTC", "ethereum": "ETH", "binancecoin": "BNB",
+        "solana": "SOL", "ripple": "XRP", "cardano": "ADA",
+        "dogecoin": "DOGE", "avalanche-2": "AVAX",
+        "polkadot": "DOT", "chainlink": "LINK",
+    }
     try:
         r = requests.get(
-            "https://api.binance.com/api/v3/ticker/24hr",
+            "https://api.coingecko.com/api/v3/coins/markets",
+            params={"vs_currency": "usd", "order": "market_cap_desc", "per_page": 10, "sparkline": "false"},
             timeout=15,
         )
         r.raise_for_status()
-        ticker_map = {t["symbol"]: t for t in r.json()}
+        data = r.json()
         result = []
-        for s in symbols:
-            t = ticker_map.get(s)
-            if t:
-                sym = s.replace("USDT", "")
-                result.append({
-                    "symbol": sym,
-                    "name": names.get(sym, sym),
-                    "price": float(t["lastPrice"]),
-                    "change_24h": float(t["priceChangePercent"]),
-                    "market_cap": 0,  # Binance不提供MC
-                })
+        for coin in data:
+            cid = coin["id"]
+            result.append({
+                "symbol": symbol_map.get(cid, coin["symbol"].upper()),
+                "name": names_map.get(cid, coin["name"]),
+                "price": coin["current_price"],
+                "change_24h": coin["price_change_percentage_24h"],
+                "market_cap": coin["market_cap"],
+            })
         print(f"[行情] 获取 {len(result)} 个代币")
         return result
     except Exception as e:
