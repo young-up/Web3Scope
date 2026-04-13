@@ -25,13 +25,12 @@ def _alchemy_request(method, params=None):
 
 
 def get_eth_price():
-    """获取ETH价格（带缓存）"""
+    """获取ETH价格（CoinCap API，免费无限流）"""
     if _price_cache["eth_price"] and time.time() - _price_cache["timestamp"] < _CACHE_TTL:
         return _price_cache["eth_price"]
     try:
-        r = requests.get("https://api.coingecko.com/api/v3/simple/price",
-            params={"ids": "ethereum", "vs_currencies": "usd"}, timeout=10)
-        price = r.json().get("ethereum", {}).get("usd", 0)
+        r = requests.get("https://api.coincap.io/v2/assets/ethereum", timeout=10)
+        price = float(r.json()["data"]["priceUsd"])
         _price_cache["eth_price"] = price
         _price_cache["timestamp"] = time.time()
         return price
@@ -41,7 +40,6 @@ def get_eth_price():
 
 def fetch_latest_transfers(limit=20):
     """获取最新大额转账"""
-    from config import ALCHEMY_API_KEY
     if not ALCHEMY_API_KEY:
         print("[链上] 未配置ALCHEMY_API_KEY，跳过链上监控")
         return []
@@ -51,7 +49,6 @@ def fetch_latest_transfers(limit=20):
         print("[链上] 无法获取ETH价格")
         return []
 
-    # 获取最新区块
     block_num = _alchemy_request("eth_blockNumber")
     if not block_num:
         return []
@@ -59,7 +56,6 @@ def fetch_latest_transfers(limit=20):
     block_num = int(block_num, 16)
     events = []
 
-    # 获取最近10个区块(带完整交易数据)
     for offset in range(10):
         block = _alchemy_request("eth_getBlockByNumber", [hex(block_num - offset), True])
         if not block:
@@ -74,7 +70,7 @@ def fetch_latest_transfers(limit=20):
             value_eth = int(tx.get("value", "0x0"), 16) / 1e18
             value_usd = value_eth * eth_price
 
-            if value_usd >= LARGE_TRANSFER_THRESHOLD_USD * 0.1:  # 10万美元以上
+            if value_usd >= LARGE_TRANSFER_THRESHOLD_USD * 0.1:
                 events.append({
                     "type": "transfer",
                     "chain": "ethereum",
@@ -92,40 +88,27 @@ def fetch_latest_transfers(limit=20):
 
 
 def fetch_top_tokens():
-    """获取主流代币行情（带缓存）"""
+    """获取主流代币行情（CoinCap API，免费无限流）"""
     if _price_cache["data"] and time.time() - _price_cache["timestamp"] < _CACHE_TTL:
         return _price_cache["data"]
-    
-    ids = "bitcoin,ethereum,binancecoin,solana,ripple,cardano,dogecoin,avalanche-2,polkadot,chainlink"
-    names_map = {
-        "bitcoin": "Bitcoin", "ethereum": "Ethereum", "binancecoin": "BNB",
-        "solana": "Solana", "ripple": "XRP", "cardano": "Cardano",
-        "dogecoin": "Dogecoin", "avalanche-2": "Avalanche",
-        "polkadot": "Polkadot", "chainlink": "Chainlink",
-    }
-    symbol_map = {
-        "bitcoin": "BTC", "ethereum": "ETH", "binancecoin": "BNB",
-        "solana": "SOL", "ripple": "XRP", "cardano": "ADA",
-        "dogecoin": "DOGE", "avalanche-2": "AVAX",
-        "polkadot": "DOT", "chainlink": "LINK",
-    }
+
+    ids = "bitcoin,ethereum,binance-coin,solana,ripple,cardano,dogecoin,avalanche,polkadot,chainlink"
     try:
         r = requests.get(
-            "https://api.coingecko.com/api/v3/coins/markets",
-            params={"vs_currency": "usd", "order": "market_cap_desc", "per_page": 10, "sparkline": "false"},
+            "https://api.coincap.io/v2/assets",
+            params={"ids": ids, "limit": 10},
             timeout=15,
         )
         r.raise_for_status()
-        data = r.json()
+        data = r.json()["data"]
         result = []
         for coin in data:
-            cid = coin["id"]
             result.append({
-                "symbol": symbol_map.get(cid, coin["symbol"].upper()),
-                "name": names_map.get(cid, coin["name"]),
-                "price": coin["current_price"],
-                "change_24h": coin["price_change_percentage_24h"],
-                "market_cap": coin["market_cap"],
+                "symbol": coin["symbol"],
+                "name": coin["name"],
+                "price": float(coin["priceUsd"]),
+                "change_24h": float(coin["changePercent24Hr"]) if coin.get("changePercent24Hr") else 0,
+                "market_cap": float(coin["marketCapUsd"]) if coin.get("marketCapUsd") else 0,
             })
         print(f"[行情] 获取 {len(result)} 个代币")
         _price_cache["data"] = result
