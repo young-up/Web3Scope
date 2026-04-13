@@ -1,6 +1,11 @@
 import requests
+import time
 from datetime import datetime
 from config import ALCHEMY_API_KEY, LARGE_TRANSFER_THRESHOLD_USD
+
+# 简单缓存，避免频繁请求外部API
+_price_cache = {"data": None, "eth_price": None, "timestamp": 0}
+_CACHE_TTL = 300  # 5分钟缓存
 
 
 def _alchemy_request(method, params=None):
@@ -20,13 +25,18 @@ def _alchemy_request(method, params=None):
 
 
 def get_eth_price():
-    """获取ETH价格"""
+    """获取ETH价格（带缓存）"""
+    if _price_cache["eth_price"] and time.time() - _price_cache["timestamp"] < _CACHE_TTL:
+        return _price_cache["eth_price"]
     try:
         r = requests.get("https://api.coingecko.com/api/v3/simple/price",
             params={"ids": "ethereum", "vs_currencies": "usd"}, timeout=10)
-        return r.json().get("ethereum", {}).get("usd", 0)
+        price = r.json().get("ethereum", {}).get("usd", 0)
+        _price_cache["eth_price"] = price
+        _price_cache["timestamp"] = time.time()
+        return price
     except:
-        return 0
+        return _price_cache.get("eth_price") or 0
 
 
 def fetch_latest_transfers(limit=20):
@@ -82,7 +92,10 @@ def fetch_latest_transfers(limit=20):
 
 
 def fetch_top_tokens():
-    """获取主流代币行情"""
+    """获取主流代币行情（带缓存）"""
+    if _price_cache["data"] and time.time() - _price_cache["timestamp"] < _CACHE_TTL:
+        return _price_cache["data"]
+    
     ids = "bitcoin,ethereum,binancecoin,solana,ripple,cardano,dogecoin,avalanche-2,polkadot,chainlink"
     names_map = {
         "bitcoin": "Bitcoin", "ethereum": "Ethereum", "binancecoin": "BNB",
@@ -115,7 +128,9 @@ def fetch_top_tokens():
                 "market_cap": coin["market_cap"],
             })
         print(f"[行情] 获取 {len(result)} 个代币")
+        _price_cache["data"] = result
+        _price_cache["timestamp"] = time.time()
         return result
     except Exception as e:
         print(f"[行情] 获取失败: {e}")
-        return []
+        return _price_cache.get("data") or []
