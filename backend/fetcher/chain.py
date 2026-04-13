@@ -25,12 +25,12 @@ def _alchemy_request(method, params=None):
 
 
 def get_eth_price():
-    """获取ETH价格（CoinCap API，免费无限流）"""
+    """获取ETH价格（Coinbase API）"""
     if _price_cache["eth_price"] and time.time() - _price_cache["timestamp"] < _CACHE_TTL:
         return _price_cache["eth_price"]
     try:
-        r = requests.get("https://api.coincap.io/v2/assets/ethereum", timeout=10)
-        price = float(r.json()["data"]["priceUsd"])
+        r = requests.get("https://api.exchange.coinbase.com/products/ETH-USD/ticker", timeout=10)
+        price = float(r.json()["price"])
         _price_cache["eth_price"] = price
         _price_cache["timestamp"] = time.time()
         return price
@@ -88,28 +88,32 @@ def fetch_latest_transfers(limit=20):
 
 
 def fetch_top_tokens():
-    """获取主流代币行情（CoinCap API，免费无限流）"""
+    """获取主流代币行情（Coinbase API，免费无限流）"""
     if _price_cache["data"] and time.time() - _price_cache["timestamp"] < _CACHE_TTL:
         return _price_cache["data"]
 
-    ids = "bitcoin,ethereum,binance-coin,solana,ripple,cardano,dogecoin,avalanche,polkadot,chainlink"
+    pairs = ["BTC-USD", "ETH-USD", "BNB-USD", "SOL-USD", "XRP-USD",
+             "ADA-USD", "DOGE-USD", "AVAX-USD", "DOT-USD", "LINK-USD"]
+    names = {"BTC": "Bitcoin", "ETH": "Ethereum", "BNB": "BNB", "SOL": "Solana",
+             "XRP": "XRP", "ADA": "Cardano", "DOGE": "Dogecoin", "AVAX": "Avalanche",
+             "DOT": "Polkadot", "LINK": "Chainlink"}
     try:
-        r = requests.get(
-            "https://api.coincap.io/v2/assets",
-            params={"ids": ids, "limit": 10},
-            timeout=15,
-        )
-        r.raise_for_status()
-        data = r.json()["data"]
         result = []
-        for coin in data:
-            result.append({
-                "symbol": coin["symbol"],
-                "name": coin["name"],
-                "price": float(coin["priceUsd"]),
-                "change_24h": float(coin["changePercent24Hr"]) if coin.get("changePercent24Hr") else 0,
-                "market_cap": float(coin["marketCapUsd"]) if coin.get("marketCapUsd") else 0,
-            })
+        for pair in pairs:
+            try:
+                r = requests.get(f"https://api.exchange.coinbase.com/products/{pair}/ticker", timeout=10)
+                d = r.json()
+                sym = pair.replace("-USD", "")
+                result.append({
+                    "symbol": sym,
+                    "name": names.get(sym, sym),
+                    "price": float(d["price"]),
+                    "change_24h": float(d.get("price_24h_change", 0)) if d.get("price_24h_change") else 0,
+                    "market_cap": 0,
+                })
+            except:
+                continue
+            time.sleep(0.1)  # 避免太快
         print(f"[行情] 获取 {len(result)} 个代币")
         _price_cache["data"] = result
         _price_cache["timestamp"] = time.time()
